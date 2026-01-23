@@ -1,0 +1,15 @@
+torch 
+transformers 
+TTS 
+newspaper3k 
+beautifulsoup4 
+pandas 
+numpy 
+schedule 
+tweepy 
+moviepy 
+sentence-transformers
+google-api-python-client 
+google-auth-oauthlib 
+google-auth-httplib2
+lxml[html_clean]
