@@ -1,24 +1,38 @@
+# agents/content_generator.py
+
 from agents.content_refiner import ContentRefiner
 from agents.twitter_writer import write_twitter
 from agents.medium_writer import write_medium
 from agents.youtube_writer import write_youtube
+from utils.output_writer import save_output
+from utils.output_writer import save_output
 
-def generate_content(article_text, platform):
-    # Generate raw content
+
+def generate_content(article_text: str, platform: str) -> str:
+    """
+    Central content generation entry point.
+    """
+
     if platform == "twitter":
-        generated_text = write_twitter(article_text)
+        raw_text = write_twitter(article_text)
+
     elif platform == "medium":
-        generated_text = write_medium(article_text)
+        raw_text = write_medium(article_text)
+
     elif platform == "youtube":
-        generated_text = write_youtube(article_text)
+        raw_text = write_youtube(article_text)
+
     else:
-        raise ValueError("Unsupported platform")
-    
-    # Refine content for style
+        raise ValueError(f"Unsupported platform: {platform}")
+
     refiner = ContentRefiner()
-    final_output = refiner.refine(
-        text=generated_text,
-        style=platform  # twitter / medium / youtube
+    final_text = refiner.refine(
+        text=raw_text,
+        style=platform   # ✅ FIXED
     )
 
-    return final_output
+    saved_path = save_output(final_text, platform)
+    print(f"✅ Content saved to {saved_path}")
+
+    return final_text
+
