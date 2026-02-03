@@ -6,7 +6,7 @@ import pandas as pd
 # ---------------- PATH FIX ----------------
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT_DIR))
-from run import main
+
 
 # ---------------- IMPORTS ----------------
 from agents.news_scraper import scrape_news
