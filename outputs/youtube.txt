@@ -1,17 +1,17 @@
-Generated on: 2026-01-30 20:53:58.251799
+Generated on: 2026-02-03 22:59:08.693999
 Platform: YOUTUBE
 
-Follow Follow
+Anthropic's Claude AI models experienced a major outage today, impacting products like Claude Code. Developers were seeing a 500 error when trying to use Claude Code, and Anthropic said that it was seeing elevated error rates on its APIs "across all Claude models." Anthropic quickly identified the root cause and implemented a fix within around [&#8230;]
 
-Artificial intelligence is more a part of our lives than ever before. While some might call it hype and compare it to NFTs or 3D TVs, generative AI is causing a sea change in nearly every part of the technology industry. OpenAI’s ChatGPT is still the best-known AI chatbot around, but with Google pushing Gemini, Microsoft building Copilot, and Apple adding its Intelligence to Siri, AI is probably going to be in the spotlight for a very long time. At The Verge, we’re exploring what might be possible with AI — and a lot of the bad stuff AI does, too.
+In the meantime, you should read the full article.
 
-We have to admit that this is a good time to talk about AI. It's hard to be sure that any of the talk is going to be particularly positive, but it is interesting to see how many people are talking about AI and the implications.
+Image source: https://www.youtube.com/watch?v=xX2t6jYXKzQ
 
-There is a lot of talk about AI, but there is also talk about it in the tech world. A lot of it is about the implications of AI for our lives.
+Image source: https://www.youtube.com/watch?v=lZFxPpJ4z4M
 
-There's a lot of talk about AI.
+The article can be found here: https://en.wikipedia.org/wiki/The_Chronicle_of_the_Chronicle
 
-There's a lot of talk about it in the tech world.
+Image source: https://www.youtube.com/watch?v=1vY9V_xL4b3U
 
 If this trend continues, it could completely reshape how the industry works.
 
