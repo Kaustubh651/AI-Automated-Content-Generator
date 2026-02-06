@@ -1,7 +1,10 @@
+# config\config.yaml
 model:
-  name: gpt2
+  name: HuggingFaceH4/zephyr-7b-beta
   temperature: 0.7
-  max_tokens: 300
+  max_tokens:  512
+  top_p: 0.95
+
 
 platforms:
   - twitter

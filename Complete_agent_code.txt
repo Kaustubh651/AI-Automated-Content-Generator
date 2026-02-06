@@ -1,0 +1,1283 @@
+# agents/content_generator.py
+
+from agents.content_refiner import ContentRefiner
+from agents.twitter_writer import write_twitter
+from agents.medium_writer import write_medium
+from agents.youtube_writer import write_youtube
+from utils.output_writer import save_output
+from utils.output_writer import save_output
+from agents.trend_bias_engine import apply_trend_bias
+
+
+def generate_content(article_text: str, platform: str, trend_status: str = "STABLE") -> str:
+    
+    """
+    Central content generation entry point.
+    """
+    biased_text = apply_trend_bias(article_text, trend_status)
+
+    if platform == "twitter":
+        raw_text = write_twitter(biased_text)
+
+    elif platform == "medium":
+        raw_text = write_medium(biased_text)
+
+    elif platform == "youtube":
+        raw_text = write_youtube(biased_text)
+
+    else:
+        raise ValueError(f"Unsupported platform: {platform}")
+
+    refiner = ContentRefiner()
+    final_text = refiner.refine(
+        text=raw_text,
+        style=platform   # ✅ FIXED
+    )
+
+    saved_path = save_output(final_text, platform)
+    print(f"✅ Content saved to {saved_path}")
+
+    return final_text
+
+
+-------------------------------------------------------------------------------------------
+agent\content_refiner.py
+import re
+from difflib import SequenceMatcher
+
+
+class ContentRefiner:
+    def __init__(self, similarity_threshold: float = 0.88):
+        self.similarity_threshold = similarity_threshold
+
+    # ================= CORE =================
+    def refine(self, text: str, style: str) -> str:
+        """
+        Clean, deduplicate and format generated text
+        according to the target platform style.
+        """
+        style = style.lower()
+
+        cleaned_text = self._remove_prompt_artifacts(text)
+        lines = self._split_lines(cleaned_text)
+        lines = self._deduplicate(lines)
+
+        if style == "twitter":
+            return self._format_twitter(lines)
+        elif style == "medium":
+            return self._format_medium(lines)
+        elif style == "youtube":
+            return self._format_youtube(lines)
+        else:
+            return "\n".join(lines)
+
+    # ================= CLEANING =================
+    def _remove_prompt_artifacts(self, text: str) -> str:
+    # Remove instruction blocks and bullets
+        patterns = [
+            r"You are .*",
+            r"Rules:.*",
+            r"Structure:.*",
+            r"Tone:.*",
+            r"Article:.*",
+            r"Write .*",
+            r"Read the article .*",
+            r"- Confident tone.*",
+            r"- Slightly controversial.*",
+            r"- .*tweets.*",
+            r"- No emojis.*",
+            r"- Strong hook.*",
+            r"- Explain impact.*",
+            r"- Simple language.*",
+            r"- End with call to action.*"
+        ]
+
+        for p in patterns:
+            text = re.sub(p, "", text, flags=re.IGNORECASE)
+
+        # Remove leftover bullet-only lines
+        text = "\n".join(
+            line for line in text.split("\n")
+            if not re.match(r"^\s*-\s*", line)
+        )
+
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
+
+
+    def _split_lines(self, text: str):
+        return [line.strip() for line in text.split("\n") if line.strip()]
+
+    def _deduplicate(self, lines):
+        unique_lines = []
+        for line in lines:
+            if not any(self._is_similar(line, existing) for existing in unique_lines):
+                unique_lines.append(line)
+        return unique_lines
+
+    def _is_similar(self, a: str, b: str) -> bool:
+        return (
+            SequenceMatcher(None, a.lower(), b.lower()).ratio()
+            > self.similarity_threshold
+        )
+
+    # ================= FORMATTERS =================
+    def _format_twitter(self, lines):
+        tweets = lines[:7]
+        return "\n\n".join(f"{i+1}/ {tweet}" for i, tweet in enumerate(tweets))
+
+    def _format_medium(self, lines):
+        if not lines:
+            return ""
+
+        title = lines[0] if len(lines[0]) > 20 else "The Rise of Autonomous AI Agents"
+        body = lines[1:]
+
+        sections = []
+        buffer = []
+
+        for line in body:
+            buffer.append(line)
+            if len(buffer) == 4:
+                sections.append(buffer)
+                buffer = []
+
+        formatted = [f"# {title}\n"]
+
+        for idx, section in enumerate(sections[:3], start=1):
+            formatted.append(
+                f"## Section {idx}\n" + " ".join(section)
+            )
+
+        formatted.append(
+            "## Conclusion\n"
+            "The real impact of this shift depends on how responsibly "
+            "and thoughtfully the technology is adopted."
+        )
+
+        return "\n\n".join(formatted)
+
+    def _format_youtube(self, lines):
+        if not lines:
+            return ""
+
+        hook = lines[0]
+        body = lines[1:6]
+
+        outro = (
+            "If this trend continues, it could completely reshape how the industry works.\n\n"
+            "Subscribe for more tech breakdowns and drop your thoughts in the comments."
+        )
+
+        return "\n\n".join([hook] + body + [outro])
+
+-------------------------------------------------------------------------------------------
+# agent\content_selector.py
+import pandas as pd
+import json
+from pathlib import Path
+
+RAW_PATH = "data/raw/news_sample.csv"
+OUT_PATH = "data/processed/selected_news.json"
+
+KEYWORDS = [
+    "ai", "artificial intelligence", "openai", "google",
+    "microsoft", "startup", "tech", "machine learning",
+    "llm", "genai", "cloud", "saas"
+]
+
+
+def is_relevant(title: str, text: str) -> bool:
+    content = f"{title} {text}".lower()
+    return any(k in content for k in KEYWORDS)
+
+
+def select_top_news(df, top_n=1):
+    df["is_relevant"] = df.apply(
+        lambda x: is_relevant(x["title"], x["text"]),
+        axis=1
+    )
+
+    relevant_df = df[df["is_relevant"]]
+
+    if relevant_df.empty:
+        relevant_df = df  # fallback
+
+    return relevant_df.head(top_n)
+
+
+def main():
+    df = pd.read_csv(RAW_PATH)
+    selected = select_top_news(df, top_n=1)
+
+    Path("data/processed").mkdir(parents=True, exist_ok=True)
+
+    output = []
+    for _, row in selected.iterrows():
+        output.append({
+            "title": row["title"],
+            "text": row["text"],
+            "url": row["url"]
+        })
+
+    with open(OUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(output, f, indent=2)
+
+    print(f"✅ Selected {len(output)} article(s). Saved to {OUT_PATH}")
+
+
+if __name__ == "__main__":
+    main()
+
+-------------------------------------------------------------------------------------------
+# agent\content_writer.py
+import json
+from pathlib import Path
+
+INPUT_PATH = "data/processed/news_with_opinion.json"
+OUTPUT_DIR = "data/final"
+
+
+def write_twitter(article):
+    return f"""
+🔥 {article['title']}
+
+{article['stance']}
+
+Why this matters 👇
+{article['why_it_matters']}
+
+My take:
+{article['prediction']}
+
+#Tech #AI #Startups
+""".strip()
+
+
+def write_medium(article):
+    return f"""
+# {article['title']}
+
+## What happened?
+{article['text']}
+
+## Why this matters
+{article['why_it_matters']}
+
+## My opinion
+{article['stance']}
+
+## What’s next?
+{article['prediction']}
+""".strip()
+
+
+def write_youtube(article):
+    return f"""
+[INTRO]
+Today something BIG happened in tech.
+
+{article['title']}
+
+[BODY]
+Here’s what’s going on:
+{article['text']}
+
+Why should you care?
+{article['why_it_matters']}
+
+My honest take:
+{article['stance']}
+
+[OUTRO]
+If this trend continues,
+{article['prediction']}
+
+Like, subscribe, and see you tomorrow.
+""".strip()
+
+
+def main():
+    articles = json.load(open(INPUT_PATH, "r", encoding="utf-8"))
+
+    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+
+    for i, art in enumerate(articles):
+        content = {
+            "twitter": write_twitter(art),
+            "medium": write_medium(art),
+            "youtube": write_youtube(art),
+            "source_url": art.get("url")
+        }
+
+        out_file = f"{OUTPUT_DIR}/content_{i}.json"
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump(content, f, indent=2)
+
+        print(f"✅ Content generated → {out_file}")
+
+
+if __name__ == "__main__":
+    main()
+
+
+-------------------------------------------------------------------------------------------
+# agent\llm_engine.py
+from transformers import AutoTokenizer, AutoModelForCausalLM
+import torch
+
+# Using gpt2 instead of gemma-2b-it for better compatibility (no authentication needed)
+MODEL_NAME = "gpt2"
+
+class LLMEngine:
+    def __init__(self):
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.model = AutoModelForCausalLM.from_pretrained(
+                MODEL_NAME,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+            ).to(self.device)
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            raise
+
+    def generate(self, prompt, max_new_tokens=300):
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+
+        outputs = self.model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9
+        )
+
+        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+-------------------------------------------------------------------------------------------
+# agents/market_signal_collector.py
+
+import csv
+from datetime import datetime
+from pathlib import Path
+
+import feedparser
+
+
+# ---------------- CONFIG ----------------
+RSS_SOURCES = {
+    "ai_news": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+    "tech_news": "https://www.theverge.com/rss/index.xml"
+}
+
+OUTPUT_DIR = Path("data/processed")
+OUTPUT_FILE = OUTPUT_DIR / "market_signals.csv"
+
+
+# ---------------- CORE ----------------
+def collect_market_signals(limit_per_source: int = 5):
+    """
+    Collects raw market signals from public RSS feeds
+    and stores them in a structured CSV.
+    """
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    signals = []
+
+    for source_name, feed_url in RSS_SOURCES.items():
+        print(f"[SIGNAL] Fetching from {source_name}")
+
+        feed = feedparser.parse(feed_url)
+
+        for entry in feed.entries[:limit_per_source]:
+            signal = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "source": source_name,
+                "title": entry.get("title", "").strip(),
+                "summary": entry.get("summary", "").strip(),
+                "link": entry.get("link", ""),
+                "type": "news"
+            }
+            signals.append(signal)
+
+    _save_signals(signals)
+    print(f"[OK] {len(signals)} market signals collected")
+    return signals   # ✅ ADD THIS
+
+# ---------------- SAVE ----------------
+def _save_signals(signals):
+    if not signals:
+        print("[WARN] No signals to save")
+        return
+
+    with open(OUTPUT_FILE, mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=signals[0].keys()
+        )
+        writer.writeheader()
+        writer.writerows(signals)
+
+    print(f"[SAVE] Signals written to {OUTPUT_FILE}")
+
+
+# ---------------- CLI TEST ----------------
+if __name__ == "__main__":
+    collect_market_signals()
+
+-------------------------------------------------------------------------------------------
+# agents/market_signal_scorer.py
+
+import math
+from datetime import datetime
+from collections import defaultdict
+
+
+TREND_KEYWORDS = [
+    "ai", "agent", "autonomous", "openai", "launch",
+    "release", "framework", "model", "regulation",
+    "startup", "funding", "policy"
+]
+
+
+class MarketSignalScorer:
+    def __init__(self, decay_hours=48):
+        self.decay_hours = decay_hours
+
+    # ---------- PUBLIC ----------
+    def score(self, signals):
+        """
+        signals: list of dicts
+        Each dict must contain: title, summary, source, timestamp
+        """
+
+        grouped = self._group_by_topic(signals)
+        scored_topics = []
+
+        for topic, items in grouped.items():
+            score = self._compute_score(items)
+            scored_topics.append({
+                "topic": topic,
+                "score": round(score, 3),
+                "mentions": len(items),
+                "sources": list(set(i["source"] for i in items))
+            })
+
+        scored_topics.sort(key=lambda x: x["score"], reverse=True)
+        return scored_topics
+
+    # ---------- CORE LOGIC ----------
+    def _compute_score(self, items):
+        freq_score = math.log(len(items) + 1)
+
+        recency_score = sum(
+            self._recency_weight(i["timestamp"]) for i in items
+        ) / len(items)
+
+        keyword_score = sum(
+            self._keyword_strength(i["title"] + " " + i["summary"])
+            for i in items
+        ) / len(items)
+
+        source_diversity = len(set(i["source"] for i in items))
+
+        final_score = (
+            0.4 * freq_score +
+            0.3 * recency_score +
+            0.2 * keyword_score +
+            0.1 * source_diversity
+        )
+
+        return final_score
+
+    # ---------- HELPERS ----------
+    def _recency_weight(self, timestamp):
+        """
+        Expects ISO timestamp string
+        """
+        now = datetime.utcnow()
+        t = datetime.fromisoformat(timestamp)
+        hours_diff = (now - t).total_seconds() / 3600
+
+        return math.exp(-hours_diff / self.decay_hours)
+
+    def _keyword_strength(self, text):
+        text = text.lower()
+        hits = sum(1 for kw in TREND_KEYWORDS if kw in text)
+        return hits / max(len(TREND_KEYWORDS), 1)
+
+    def _group_by_topic(self, signals):
+        buckets = defaultdict(list)
+
+        for s in signals:
+            topic = self._extract_topic(s["title"])
+            buckets[topic].append(s)
+
+        return buckets
+
+    def _extract_topic(self, title):
+        """
+        Naive topic extraction (will improve in Sprint 4)
+        """
+        words = title.split()
+        return " ".join(words[:4]).lower()
+
+-------------------------------------------------------------------------------------------
+#agent\medium_writer.py
+from agents.llm_engine import LLMEngine
+
+llm = LLMEngine()
+
+def write_medium(article):
+    prompt = f"""
+You are a tech blogger writing for Medium.
+
+Write a thoughtful article based on the news.
+Structure:
+- Title
+- Short intro
+- 3 sections with headings
+- Practical conclusion
+
+Tone: analytical, clear, human.
+
+Article:
+{article}
+"""
+    return llm.generate(prompt, max_new_tokens=600)
+
+-------------------------------------------------------------------------------------------
+#agent\news_scraper.py
+import pandas as pd
+from newspaper import Article
+from datetime import datetime
+
+# You can later replace this with real RSS / API sources
+NEWS_URLS = [
+    "https://openai.com/blog",
+    "https://www.theverge.com/ai-artificial-intelligence",
+]
+
+OUTPUT_PATH = "data/raw/news_sample.csv"
+
+
+def scrape_article(url: str) -> dict | None:
+    """
+    Scrape a single article and return structured data
+    """
+    try:
+        article = Article(url)
+        article.download()
+        article.parse()
+
+        if not article.text.strip():
+            return None
+
+        return {
+            "title": article.title,
+            "text": article.text,
+            "url": url,
+            "scraped_at": datetime.utcnow().isoformat()
+        }
+
+    except Exception as e:
+        print(f"[ERROR] Failed to scrape {url}: {e}")
+        return None
+
+
+def scrape_news() -> pd.DataFrame:
+    """
+    Scrape all news sources and save to CSV
+    """
+    articles = []
+
+    for url in NEWS_URLS:
+        print(f"[INFO] Scraping: {url}")
+        data = scrape_article(url)
+        if data:
+            articles.append(data)
+
+    if not articles:
+        raise RuntimeError("No articles scraped.")
+
+    df = pd.DataFrame(articles)
+    df.to_csv(OUTPUT_PATH, index=False)
+
+    print(f"[SUCCESS] News saved to {OUTPUT_PATH}")
+    return df
+
+
+# Allow standalone execution
+if __name__ == "__main__":
+    scrape_news()
+    print("News scraping completed.")
+
+-------------------------------------------------------------------------------------------
+#agent\opinion_agent.py
+import json
+from pathlib import Path
+
+INPUT_PATH = "data/processed/selected_news.json"
+OUTPUT_PATH = "data/processed/news_with_opinion.json"
+
+
+def generate_opinion(article):
+    """
+    TEMP LOGIC (Sprint 1-A)
+    Real LLM will replace this in next step
+    """
+    return {
+        "stance": "This is a major shift in the tech industry.",
+        "why_it_matters": "It impacts startups, developers, and future AI regulation.",
+        "prediction": "More companies will copy this approach within 6–12 months."
+    }
+
+
+def main():
+    articles = json.load(open(INPUT_PATH, "r", encoding="utf-8"))
+
+    enriched = []
+    for art in articles:
+        opinion = generate_opinion(art)
+        enriched.append({**art, **opinion})
+
+    Path("data/processed").mkdir(parents=True, exist_ok=True)
+
+    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(enriched, f, indent=2)
+
+    print(f"✅ Opinion added → {OUTPUT_PATH}")
+
+
+if __name__ == "__main__":
+    main()
+
+-------------------------------------------------------------------------------------------
+#agent\style_router.py
+from agents.content_refiner import ContentRefiner
+
+from agents.twitter_writer import write_twitter
+from agents.medium_writer import write_medium
+from agents.youtube_writer import write_youtube
+
+def generate_content(article_text, platform):
+    if platform == "twitter":
+        return write_twitter(article_text)
+    elif platform == "medium":
+        return write_medium(article_text)
+    elif platform == "youtube":
+        return write_youtube(article_text)
+    else:
+        raise ValueError("Unsupported platform")
+        
+
+-------------------------------------------------------------------------------------------
+# agents/trend_bias_engine.py
+
+from agents.trend_evolution import get_trend_evolution_status
+
+
+def apply_trend_bias(trends, boost=0.15, penalty=0.2):
+    """
+    Apply learning-based bias using historical trend evolution.
+    """
+
+    print("\n[SPRINT 5] Applying trend bias engine")
+
+    evolution_map = get_trend_evolution_status()
+    biased_trends = []
+
+    for trend in trends:
+        name = trend["topic"]   # ✅ FIXED
+        score = trend["score"]
+        status = evolution_map.get(name, "NEW")
+
+        original_score = score
+
+        if status == "RISING":
+            score += score * boost
+            print(f"[SPRINT 5] 🔼 '{name}' boosted (RISING) {original_score:.3f} → {score:.3f}")
+
+        elif status == "FALLING":
+            score -= score * penalty
+            print(f"[SPRINT 5] 🔽 '{name}' penalized (FALLING) {original_score:.3f} → {score:.3f}")
+
+        else:
+            print(f"[SPRINT 5] ⏸ '{name}' unchanged ({status})")
+
+        trend["score"] = round(score, 4)
+        trend["bias_status"] = status
+        biased_trends.append(trend)
+
+    biased_trends.sort(key=lambda x: x["score"], reverse=True)
+    return biased_trends
+
+-------------------------------------------------------------------------------------------
+# agents/trend_evolution.py
+
+import json
+from datetime import datetime
+from pathlib import Path
+
+MEMORY_DIR = Path("data/memory")
+TREND_MEMORY_FILE = MEMORY_DIR / "trend_memory.json"
+
+MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _load_memory():
+    if not TREND_MEMORY_FILE.exists():
+        return {}
+    with open(TREND_MEMORY_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _save_memory(memory):
+    with open(TREND_MEMORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(memory, f, indent=2)
+
+
+# ==================================================
+# SPRINT 4 — UPDATE MEMORY
+# ==================================================
+def update_trend_memory(trends):
+    memory = _load_memory()
+    now = datetime.utcnow().isoformat()
+
+    for trend in trends:
+        topic = trend["topic"]
+
+        if topic not in memory:
+            memory[topic] = {
+                "count": 0,
+                "first_seen": now,
+                "last_seen": now
+            }
+
+        memory[topic]["count"] += 1
+        memory[topic]["last_seen"] = now
+
+    _save_memory(memory)
+
+
+# ==================================================
+# ✅ SPRINT 5 — READ ALL EVOLUTION STATES
+# ==================================================
+def get_trend_evolution_status():
+    """
+    Returns:
+    {
+        "openai agents": "RISING",
+        "autonomous ai": "STABLE",
+        ...
+    }
+    """
+    memory = _load_memory()
+    evolution_map = {}
+
+    for topic, meta in memory.items():
+        count = meta.get("count", 0)
+
+        if count >= 5:
+            status = "STABLE"
+        elif count >= 2:
+            status = "RISING"
+        else:
+            status = "NEW"
+
+        evolution_map[topic] = status
+
+    return evolution_map
+
+-------------------------------------------------------------------------------------------
+# agents/trend_memory.py
+
+import csv
+from datetime import datetime
+from pathlib import Path
+from typing import List, Dict
+
+# ---------------- PATHS ----------------
+MEMORY_DIR = Path("data/memory")
+MEMORY_FILE = MEMORY_DIR / "trend_memory.csv"
+
+FIELDS = [
+    "trend",
+    "first_seen",
+    "last_seen",
+    "frequency",
+    "avg_score"
+]
+
+
+# ---------------- INIT ----------------
+def init_memory():
+    """
+    Initialize memory storage if not present.
+    """
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not MEMORY_FILE.exists():
+        with open(MEMORY_FILE, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=FIELDS)
+            writer.writeheader()
+
+
+# ---------------- LOAD ----------------
+def load_memory() -> Dict[str, Dict]:
+    """
+    Load memory into dict keyed by trend.
+    """
+    init_memory()
+    memory = {}
+
+    with open(MEMORY_FILE, mode="r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            memory[row["trend"]] = {
+                "first_seen": row["first_seen"],
+                "last_seen": row["last_seen"],
+                "frequency": int(row["frequency"]),
+                "avg_score": float(row["avg_score"])
+            }
+
+    return memory
+
+
+# ---------------- UPDATE ----------------
+def update_memory(trends: List[Dict]):
+    """
+    Update memory using newly detected trends.
+    trends = [{"trend": str, "score": float}]
+    """
+    memory = load_memory()
+    now = datetime.utcnow().isoformat()
+
+    for item in trends:
+        trend = item["trend"].lower().strip()
+        score = float(item["score"])
+
+        if trend in memory:
+            prev = memory[trend]
+            freq = prev["frequency"] + 1
+
+            # running average
+            new_avg = (
+                (prev["avg_score"] * prev["frequency"]) + score
+            ) / freq
+
+            memory[trend].update({
+                "last_seen": now,
+                "frequency": freq,
+                "avg_score": round(new_avg, 4)
+            })
+        else:
+            memory[trend] = {
+                "first_seen": now,
+                "last_seen": now,
+                "frequency": 1,
+                "avg_score": round(score, 4)
+            }
+
+    _save_memory(memory)
+
+
+# ---------------- SAVE ----------------
+def _save_memory(memory: Dict[str, Dict]):
+    with open(MEMORY_FILE, mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDS)
+        writer.writeheader()
+
+        for trend, data in memory.items():
+            writer.writerow({
+                "trend": trend,
+                **data
+            })
+
+
+# ---------------- CLI TEST ----------------
+if __name__ == "__main__":
+    test_trends = [
+        {"trend": "openai agents", "score": 0.82},
+        {"trend": "autonomous ai", "score": 0.75},
+        {"trend": "openai agents", "score": 0.91},
+    ]
+
+    update_memory(test_trends)
+    print("✅ Trend memory updated")
+# agents/trend_memory.py
+
+import csv
+from datetime import datetime
+from pathlib import Path
+from typing import List, Dict
+
+# ---------------- PATHS ----------------
+MEMORY_DIR = Path("data/memory")
+MEMORY_FILE = MEMORY_DIR / "trend_memory.csv"
+
+FIELDS = [
+    "trend",
+    "first_seen",
+    "last_seen",
+    "frequency",
+    "avg_score"
+]
+
+
+# ---------------- INIT ----------------
+def init_memory():
+    """
+    Initialize memory storage if not present.
+    """
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
+    if not MEMORY_FILE.exists():
+        with open(MEMORY_FILE, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=FIELDS)
+            writer.writeheader()
+
+
+# ---------------- LOAD ----------------
+def load_memory() -> Dict[str, Dict]:
+    """
+    Load memory into dict keyed by trend.
+    """
+    init_memory()
+    memory = {}
+
+    with open(MEMORY_FILE, mode="r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            memory[row["trend"]] = {
+                "first_seen": row["first_seen"],
+                "last_seen": row["last_seen"],
+                "frequency": int(row["frequency"]),
+                "avg_score": float(row["avg_score"])
+            }
+
+    return memory
+
+
+# ---------------- UPDATE ----------------
+def update_memory(trends: List[Dict]):
+    """
+    Update memory using newly detected trends.
+    trends = [{"trend": str, "score": float}]
+    """
+    memory = load_memory()
+    now = datetime.utcnow().isoformat()
+
+    for item in trends:
+        trend = item["trend"].lower().strip()
+        score = float(item["score"])
+
+        if trend in memory:
+            prev = memory[trend]
+            freq = prev["frequency"] + 1
+
+            # running average
+            new_avg = (
+                (prev["avg_score"] * prev["frequency"]) + score
+            ) / freq
+
+            memory[trend].update({
+                "last_seen": now,
+                "frequency": freq,
+                "avg_score": round(new_avg, 4)
+            })
+        else:
+            memory[trend] = {
+                "first_seen": now,
+                "last_seen": now,
+                "frequency": 1,
+                "avg_score": round(score, 4)
+            }
+
+    _save_memory(memory)
+
+
+# ---------------- SAVE ----------------
+def _save_memory(memory: Dict[str, Dict]):
+    with open(MEMORY_FILE, mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=FIELDS)
+        writer.writeheader()
+
+        for trend, data in memory.items():
+            writer.writerow({
+                "trend": trend,
+                **data
+            })
+
+
+# ---------------- CLI TEST ----------------
+if __name__ == "__main__":
+    test_trends = [
+        {"trend": "openai agents", "score": 0.82},
+        {"trend": "autonomous ai", "score": 0.75},
+        {"trend": "openai agents", "score": 0.91},
+    ]
+
+    update_memory(test_trends)
+    print("✅ Trend memory updated")
+
+-------------------------------------------------------------------------------------------
+#agent\twitter_writer.py
+from agents.llm_engine import LLMEngine
+
+llm = LLMEngine()
+
+def write_twitter(article):
+    prompt = f"""
+You are a tech founder on X.
+
+Read the article below and write a sharp opinion thread.
+Rules:
+- Confident tone
+- Slightly controversial
+- 5–7 tweets
+- No emojis
+- Hook in first line
+
+Article:
+{article}
+"""
+    return llm.generate(prompt, max_new_tokens=250)
+
+-------------------------------------------------------------------------------------------
+#agent\youtube_writer.py
+from agents.llm_engine import LLMEngine
+
+llm = LLMEngine()
+
+def write_youtube(article):
+    prompt = f"""
+You are a tech YouTuber.
+
+Write a 60–90 second script.
+Rules:
+- Strong hook
+- Explain impact on industry
+- Simple language
+- End with call to action (subscribe/comment)
+
+Article:
+{article}
+"""
+    return llm.generate(prompt, max_new_tokens=500)
+
+-------------------------------------------------------------------------------------------
+# config\config.yaml
+model:
+  name: HuggingFaceH4/zephyr-7b-beta
+  temperature: 0.7
+  max_tokens:  512
+  top_p: 0.95
+
+
+platforms:
+  - twitter
+  - medium
+  - youtube
+
+output:
+  save_dir: data/processed/
+
+-------------------------------------------------------------------------------------------
+# pipelines/trend_driven_run.py
+
+import sys
+from pathlib import Path
+import pandas as pd
+
+# =========================================================
+# PATH FIX — make project root importable
+# =========================================================
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT_DIR))
+
+# =========================================================
+# IMPORTS — Sprint-wise agents
+# =========================================================
+
+# Sprint 0
+from agents.news_scraper import scrape_news
+
+# Sprint 1
+from agents.market_signal_collector import collect_market_signals
+
+# Sprint 2
+from agents.market_signal_scorer import MarketSignalScorer
+
+# Sprint 3
+from agents.content_generator import generate_content
+
+# Sprint 4
+from agents.trend_evolution import update_trend_memory
+
+# Sprint 5
+from agents.trend_bias_engine import apply_trend_bias
+
+# Utils
+from utils.config_loader import load_config
+
+
+def main():
+    print("\n" + "=" * 60)
+    print("🚀 [PIPELINE START] Trend-Driven Content System")
+    print("=" * 60 + "\n")
+
+    # =====================================================
+    # SPRINT 0 — NEWS SCRAPING
+    # =====================================================
+    print("[SPRINT 0] News Scraping → agents/news_scraper.py")
+    scrape_news()
+    print("[OK] News scraped successfully\n")
+
+    # =====================================================
+    # LOAD RAW NEWS
+    # =====================================================
+    print("[LOAD] Reading raw news articles")
+    df = pd.read_csv("data/raw/news_sample.csv")
+
+    if df.empty:
+        raise ValueError("❌ No news data found. Pipeline stopped.")
+
+    print(f"[OK] Loaded {len(df)} news articles\n")
+
+    # =====================================================
+    # SPRINT 1 — MARKET SIGNAL COLLECTION
+    # =====================================================
+    print("[SPRINT 1] Market Signal Collection → agents/market_signal_collector.py")
+    signals = collect_market_signals(limit_per_source=5)
+
+    if not signals:
+        raise ValueError("❌ No market signals collected.")
+
+    print(f"[OK] Collected {len(signals)} market signals\n")
+
+    # =====================================================
+    # SPRINT 2 — SIGNAL SCORING & TREND DETECTION
+    # =====================================================
+    print("[SPRINT 2] Trend Detection → agents/market_signal_scorer.py")
+    scorer = MarketSignalScorer()
+    ranked_trends = scorer.score(signals)
+
+    if not ranked_trends:
+        print("[WARN] No strong trends detected. Exiting.")
+        return
+
+    config = load_config()
+    top_k = config.get("top_trends", 2)
+    platforms = config.get("platforms", [])
+
+    top_trends = ranked_trends[:top_k]
+
+    print("\n🔥 Raw Detected Trends:")
+    for t in top_trends:
+        print(f"  • {t['topic']} (score={round(t['score'], 3)})")
+
+    # =====================================================
+    # SPRINT 4 — TREND MEMORY UPDATE (LEARNING INPUT)
+    # =====================================================
+    print("\n[SPRINT 4] Updating Trend Memory → agents/trend_evolution.py")
+    update_trend_memory(top_trends)
+    print("[OK] Trend memory updated\n")
+
+    # =====================================================
+    # SPRINT 5 — APPLY LEARNING / BIAS ENGINE
+    # =====================================================
+    print("[SPRINT 5] Applying Learning Bias → agents/trend_bias_engine.py")
+    biased_trends = apply_trend_bias(top_trends)
+
+    print("\n🔥 Final Trends After Learning:")
+    for t in biased_trends:
+        bias = t.get("bias_status", "NEUTRAL")
+        print(f"  • {t['topic']} (score={round(t['score'], 3)}, bias={bias})")
+
+    # =====================================================
+    # SPRINT 3 — CONTENT GENERATION (PLATFORM-WISE)
+    # =====================================================
+    print("\n[SPRINT 3] Content Generation → agents/content_generator.py")
+
+    for trend in biased_trends:
+        print(f"\n[GEN] Trend: {trend['topic']}")
+
+        related_articles = [
+            s["summary"]
+            for s in signals
+            if trend["topic"].lower() in s["title"].lower()
+        ]
+
+        article_text = " ".join(related_articles)
+
+        if not article_text.strip():
+            print("  ⚠️ No related content found, skipping")
+            continue
+
+        for platform in platforms:
+            print(f"  → Generating for {platform.upper()}")
+            generate_content(article_text, platform)
+
+    print("\n" + "=" * 60)
+    print("✅ [PIPELINE COMPLETE] Content generated for all platforms")
+    print("=" * 60 + "\n")
+
+
+if __name__ == "__main__":
+    main()
+
+-------------------------------------------------------------------------------------------
+# utils\config_loader.py
+import yaml
+from pathlib import Path
+
+CONFIG_PATH = Path("config/config.yaml")
+
+def load_config():
+    with open(CONFIG_PATH, "r") as f:
+        return yaml.safe_load(f)
+
+-------------------------------------------------------------------------------------------
+# utils/output_writer.py
+
+import os
+from datetime import datetime
+
+
+OUTPUT_DIR = "outputs"
+
+
+def save_output(content: str, platform: str) -> str:
+    """
+    Save generated content to disk by platform.
+    Returns saved file path.
+    """
+
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    ext = {
+        "twitter": "txt",
+        "medium": "md",
+        "youtube": "txt"
+    }.get(platform, "txt")
+
+    filename = f"{platform}.{ext}"
+    path = os.path.join(OUTPUT_DIR, filename)
+
+    header = f"Generated on: {datetime.now()}\nPlatform: {platform.upper()}\n\n"
+
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(header)
+        f.write(content.strip())
+
+    return path
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
