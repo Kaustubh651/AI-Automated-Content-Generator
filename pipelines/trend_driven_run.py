@@ -1,17 +1,15 @@
-# pipelines/trend_driven_run.py
-
 import sys
 from pathlib import Path
 import pandas as pd
 
 # =========================================================
-# PATH FIX — make project root importable
+# PATH FIX
 # =========================================================
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT_DIR))
 
 # =========================================================
-# IMPORTS — Sprint-wise agents
+# IMPORTS
 # =========================================================
 
 # Sprint 0
@@ -32,9 +30,13 @@ from agents.trend_evolution import update_trend_memory
 # Sprint 5
 from agents.trend_bias_engine import apply_trend_bias
 
+# Sprint 6B
+from agents.post_payload_builder import build_post_payload
+from agents.platform_poster import post_to_platform
+
 # Utils
 from utils.config_loader import load_config
-
+from utils.post_queue_writer import queue_post
 
 def main():
     print("\n" + "=" * 60)
@@ -44,7 +46,7 @@ def main():
     # =====================================================
     # SPRINT 0 — NEWS SCRAPING
     # =====================================================
-    print("[SPRINT 0] News Scraping → agents/news_scraper.py")
+    print("[SPRINT 0] News Scraping")
     scrape_news()
     print("[OK] News scraped successfully\n")
 
@@ -62,7 +64,7 @@ def main():
     # =====================================================
     # SPRINT 1 — MARKET SIGNAL COLLECTION
     # =====================================================
-    print("[SPRINT 1] Market Signal Collection → agents/market_signal_collector.py")
+    print("[SPRINT 1] Market Signal Collection")
     signals = collect_market_signals(limit_per_source=5)
 
     if not signals:
@@ -71,19 +73,19 @@ def main():
     print(f"[OK] Collected {len(signals)} market signals\n")
 
     # =====================================================
-    # SPRINT 2 — SIGNAL SCORING & TREND DETECTION
+    # SPRINT 2 — TREND DETECTION
     # =====================================================
-    print("[SPRINT 2] Trend Detection → agents/market_signal_scorer.py")
+    print("[SPRINT 2] Trend Detection")
     scorer = MarketSignalScorer()
     ranked_trends = scorer.score(signals)
 
     if not ranked_trends:
-        print("[WARN] No strong trends detected. Exiting.")
+        print("[WARN] No strong trends detected.")
         return
 
     config = load_config()
-    top_k = config.get("top_trends", 2)
     platforms = config.get("platforms", [])
+    top_k = config.get("top_trends", 2)
 
     top_trends = ranked_trends[:top_k]
 
@@ -92,27 +94,29 @@ def main():
         print(f"  • {t['topic']} (score={round(t['score'], 3)})")
 
     # =====================================================
-    # SPRINT 4 — TREND MEMORY UPDATE (LEARNING INPUT)
+    # SPRINT 4 — TREND MEMORY UPDATE
     # =====================================================
-    print("\n[SPRINT 4] Updating Trend Memory → agents/trend_evolution.py")
+    print("\n[SPRINT 4] Updating Trend Memory")
     update_trend_memory(top_trends)
     print("[OK] Trend memory updated\n")
 
     # =====================================================
-    # SPRINT 5 — APPLY LEARNING / BIAS ENGINE
+    # SPRINT 5 — LEARNING / BIAS ENGINE
     # =====================================================
-    print("[SPRINT 5] Applying Learning Bias → agents/trend_bias_engine.py")
+    print("[SPRINT 5] Applying Learning Bias")
     biased_trends = apply_trend_bias(top_trends)
 
     print("\n🔥 Final Trends After Learning:")
     for t in biased_trends:
-        bias = t.get("bias_status", "NEUTRAL")
-        print(f"  • {t['topic']} (score={round(t['score'], 3)}, bias={bias})")
+        print(
+            f"  • {t['topic']} "
+            f"(score={round(t['score'], 3)}, bias={t['bias_status']})"
+        )
 
     # =====================================================
-    # SPRINT 3 — CONTENT GENERATION (PLATFORM-WISE)
+    # SPRINT 3 — CONTENT GENERATION
     # =====================================================
-    print("\n[SPRINT 3] Content Generation → agents/content_generator.py")
+    print("\n[SPRINT 3] Content Generation")
 
     for trend in biased_trends:
         print(f"\n[GEN] Trend: {trend['topic']}")
@@ -137,9 +141,40 @@ def main():
                 trend_status=trend["bias_status"]
             )
 
-    print("\n" + "=" * 60)
-    print("✅ [PIPELINE COMPLETE] Content generated for all platforms")
-    print("=" * 60 + "\n")
+    # =====================================================
+    # SPRINT 6B — POST PREPARATION (SAFE MODE)
+    # =====================================================
+    print("\n[SPRINT 3 → 6B] Content Generation & Post Queueing")
+
+    for trend in biased_trends:
+        print(f"\n[GEN] Trend: {trend['topic']}")
+
+        related_articles = [
+            s["summary"]
+            for s in signals
+            if trend["topic"].lower() in s["title"].lower()
+        ]
+
+        article_text = " ".join(related_articles)
+
+        if not article_text.strip():
+            print("  ⚠️ No related content found, skipping")
+            continue
+
+        for platform in platforms:
+            print(f"  → Generating & queueing for {platform.upper()}")
+
+            content = generate_content(
+                article_text,
+                platform,
+                trend_status=trend["bias_status"]
+            )
+
+            queue_post(
+                platform=platform,
+                topic=trend["topic"],
+                content=content
+            )
 
 
 if __name__ == "__main__":
