@@ -39,7 +39,7 @@ def generate_content(article_text: str, platform: str, trend_status: str = "STAB
 
     output = OutputWriter()
     saved_path = output.save(final_text, platform)
-    print(f"✅ Content saved to {saved_path}")
+    print(f"[OK] Content saved to {saved_path}")
 
     return final_text
 

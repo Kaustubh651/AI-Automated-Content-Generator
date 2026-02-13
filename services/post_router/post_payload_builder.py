@@ -40,6 +40,6 @@ def build_post_payload(trend, platform):
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
-    print(f"[SPRINT 6B] 📦 Payload queued → {out_file.name}")
+    print(f"[SPRINT 6B] ≡ƒôª Payload queued ΓåÆ {out_file.name}")
 
     return payload
