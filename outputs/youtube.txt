@@ -1,17 +1,17 @@
-Generated on: 2026-02-09 17:43:36.938483
+Generated on: 2026-02-10 16:37:51.916572
 Platform: YOUTUBE
 
-New York's state legislature is set to consider a pair of bills that would require labels on AI-generated content and would put a three-year pause on new data center construction. The New York Fundamental Artificial Intelligence Requirements in News Act (NY FAIR News Act, for short) would require that any news "substantially composed, authored, or [&#8230;] New York's state legislature is set to consider a pair of bills that would require labels on AI-generated content and would put a three-year pause on new data center construction. The New York Fundamental Artificial Intelligence Requirements in News Act (NY FAIR News Act, for short) would require that any news "substantially composed, authored, or [&#8230;]
+[INTRO]
 
-Please, do not use this article to
+Today something BIG happened in tech.
 
-In the comments, I wrote:
+[HEADLINE]
 
-This is a great example of how we can use the power of Twitter to inform our readers about our industry. It's a lot like when the first "news" came out in 1997. A lot of people were interested in the news that was coming out of Silicon Valley, but were not interested in the story that was going on at the time.
+This is a brief sample article text for smoke testing.
 
-I think it's important to point out that the stories that are coming out of Silicon Valley are not news about the tech industry. They are news about the world. The story of the day is the story of the day.
+[BODY]
 
-I have some advice for you.
+Let me break down what's happening and why it matters.
 
 If this trend continues, it could completely reshape how the industry works.
 

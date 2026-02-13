@@ -1,15 +1,38 @@
-# config\config.yaml
+
 model:
   name: HuggingFaceH4/zephyr-7b-beta
   temperature: 0.7
-  max_tokens:  512
+  max_tokens: 512
   top_p: 0.95
 
-
+# Platform-specific configurations
 platforms:
-  - twitter
-  - medium
-  - youtube
+  twitter:
+    enabled: true
+    max_tokens: 250
+    max_length: 280
+  medium:
+    enabled: true
+    max_tokens: 600
+  youtube:
+    enabled: true
+    max_tokens: 500
 
+# Posting configuration
+posting:
+  live_mode: false  # Set to true to enable real posting
+  enabled_platforms:
+    - twitter
+    - medium
+    - youtube
+  queue_dir: data/post_queue
+  draft_dir: data/drafts
+
+# Output configuration
 output:
   save_dir: data/processed/
+
+# Content generation
+content:
+  use_market_signals: true
+  signal_limit: 3

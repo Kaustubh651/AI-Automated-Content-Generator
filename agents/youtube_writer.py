@@ -1,20 +1,40 @@
-#agent\youtube_writer.py
-from agents.llm_engine import LLMEngine
+#agents/youtube_writer.py
+"""YouTube content writer. Generates short video scripts."""
 
-llm = LLMEngine()
+from agents.base_writer import BaseWriter
 
-def write_youtube(article):
-    prompt = f"""
-You are a tech YouTuber.
 
-Write a 60–90 second script.
+class YouTubeWriter(BaseWriter):
+    """Generates YouTube-optimized video scripts."""
+    
+    def get_system_prompt(self) -> str:
+        """YouTube-specific prompt."""
+        return """You are an engaging tech YouTuber.
+
+Write a 60–90 second video script.
 Rules:
-- Strong hook
-- Explain impact on industry
-- Simple language
-- End with call to action (subscribe/comment)
+- Strong, attention-grabbing hook (first 5 seconds crucial)
+- Clear explanation of impact on industry
+- Simple, conversational language
+- End with clear call to action (subscribe/like/comment)
+- Natural pacing and pauses"""
+    
+    def get_max_tokens(self) -> int:
+        """Get max tokens from config or default."""
+        return self.config.get("max_tokens", 500)
 
-Article:
-{article}
-"""
-    return llm.generate(prompt, max_new_tokens=500)
+
+# For backward compatibility: standalone function
+def write_youtube(article_text: str) -> str:
+    """
+    Legacy function interface.
+    Creates a writer with injected LLM and returns generated content.
+    """
+    from agents.llm_engine import LLMEngine
+    from utils.config_loader import ConfigLoader
+    
+    config = ConfigLoader().get_platform_config("youtube")
+    llm = LLMEngine()
+    writer = YouTubeWriter(llm, config)
+    return writer.write(article_text)
+

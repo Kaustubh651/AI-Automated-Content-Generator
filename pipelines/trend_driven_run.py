@@ -13,30 +13,31 @@ sys.path.append(str(ROOT_DIR))
 # =========================================================
 
 # Sprint 0
-from agents.news_scraper import scrape_news
+from services.scraper import scrape_news
 
 # Sprint 1
-from agents.market_signal_collector import collect_market_signals
+from services.scoring_engine import collect_market_signals
 
 # Sprint 2
-from agents.market_signal_scorer import MarketSignalScorer
+from services.scoring_engine import MarketSignalScorer
 
 # Sprint 3
-from agents.content_generator import generate_content
+from services.meme_engine import generate_content
 
 # Sprint 4
-from agents.trend_evolution import update_trend_memory
+from services.scoring_engine import update_trend_memory
 
 # Sprint 5
-from agents.trend_bias_engine import apply_trend_bias
+from services.scoring_engine import apply_trend_bias
 
 # Sprint 6B
-from agents.post_payload_builder import build_post_payload
-from agents.platform_poster import post_to_platform
+from services.post_router import build_post_payload, post_to_platform
 
 # Utils
-from utils.config_loader import load_config
-from utils.post_queue_writer import queue_post
+from shared.config import get_config
+
+def load_config():
+    return get_config().get_all()
 
 def main():
     print("\n" + "=" * 60)
@@ -170,10 +171,10 @@ def main():
                 trend_status=trend["bias_status"]
             )
 
-            queue_post(
-                platform=platform,
-                topic=trend["topic"],
-                content=content
+            # Build and queue post payload
+            build_post_payload(
+                trend=trend["topic"],
+                platform=platform
             )
 
 

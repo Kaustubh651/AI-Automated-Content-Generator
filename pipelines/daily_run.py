@@ -9,9 +9,13 @@ sys.path.append(str(ROOT_DIR))
 
 
 # ---------------- IMPORTS ----------------
-from agents.news_scraper import scrape_news
-from agents.content_generator import generate_content
-from utils.config_loader import load_config
+from services.scraper import scrape_news
+from services.meme_engine import generate_content
+from shared.config import get_config
+
+def load_config():
+    # Backwards-compatible wrapper
+    return get_config().get_all()
 
 
 def main():
